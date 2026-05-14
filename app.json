@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Power Amigo Field App",
+    "slug": "power-amigo-field-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "poweramigo",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#00AEEF"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Power Amigo needs camera access to scan QR codes on solar sensors and gateways."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Power Amigo needs your location to record the GPS coordinates of registered sensors."
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#00AEEF"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ],
+      "package": "com.poweramigo.fieldapp"
+    },
+    "ios": {
+      "bundleIdentifier": "com.poweramigo.fieldapp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Power Amigo needs camera access to scan QR codes on solar sensors and gateways.",
+        "NSLocationWhenInUseUsageDescription": "Power Amigo needs your location to record the GPS coordinates of registered sensors."
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
