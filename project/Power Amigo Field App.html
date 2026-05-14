@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Power Amigo · Field App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; font-family: 'Barlow', system-ui, sans-serif; }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse at top, #DFEEF6 0%, #C8DCE8 60%, #B9D0DE 100%);
+      display: flex; align-items: center; justify-content: center;
+      padding: 32px 16px;
+      overflow-y: auto;
+    }
+    /* subtle solar-panel pattern bg */
+    body::before {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image:
+        linear-gradient(90deg, rgba(11,37,69,0.04) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(11,37,69,0.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes scan {
+      0% { top: 8%; }
+      50% { top: 88%; }
+      100% { top: 8%; }
+    }
+    /* number input — strip spinners for cleaner field look */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+    select { font-family: inherit; }
+    button { font-family: inherit; }
+  </style>
+</head>
+<body>
+  <div id="root" style="position: relative; z-index: 1;"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="logo.jsx"></script>
+  <script type="text/babel" src="ui.jsx"></script>
+  <script type="text/babel" src="screens.jsx"></script>
+  <script type="text/babel" src="edit-screens.jsx"></script>
+  <script type="text/babel" src="tabs.jsx"></script>
+
+  <script type="text/babel">
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "brandCyan": "#00AEEF",
+      "brandGreen": "#39B54A",
+      "fontStack": "Barlow",
+      "startScreen": "login"
+    }/*EDITMODE-END*/;
+
+    function App() {
+      const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+      // Apply brand color tokens as CSS variables
+      React.useEffect(() => {
+        document.documentElement.style.setProperty('--brand-cyan', t.brandCyan);
+        document.documentElement.style.setProperty('--brand-green', t.brandGreen);
+        document.body.style.fontFamily = `${t.fontStack}, system-ui, sans-serif`;
+      }, [t.brandCyan, t.brandGreen, t.fontStack]);
+
+      // Navigation state
+      const [screen, setScreen] = React.useState(t.startScreen);
+      const [tab, setTab] = React.useState('dashboard');
+
+      // Seed sites with rowsList → sensorsList (each sensor has GPS)
+      const [sites, setSites] = React.useState(() => {
+        // Per-site base coords so the mock GPS values are plausible per region
+        const SITE_BASE = {
+          s1: { lat: -25.5408, lng: 152.7012 }, // Maryborough QLD
+          s2: { lat: -34.7912, lng: 145.8743 }, // Coleambally NSW
+          s3: { lat: -32.4361, lng: 137.7715 }, // Bungala SA
+        };
+        const makeSensors = (rowIdx, count, base) => Array.from({ length: count }, (_, i) => ({
+          id: `PA-SN-7F3C-${(1000 + rowIdx * 100 + i * 7).toString().padStart(4, '0')}`,
+          lat: +(base.lat + (rowIdx * 0.0004) + (Math.random() - 0.5) * 0.0001).toFixed(4),
+          lng: +(base.lng + (i * 0.0006)).toFixed(4),
+          status: i === 1 && rowIdx === 1 ? 'fault' : 'online',
+        }));
+        return MOCK_SITES.map(s => {
+          const base = SITE_BASE[s.id] || { lat: -28.0167, lng: 153.4000 };
+          const rowSeeds = [
+            { name: 'Row 01-A', expected: 8, registered: 8 },
+            { name: 'Row 01-B', expected: 8, registered: 8 },
+            { name: 'Row 02-A', expected: 8, registered: 6 },
+            { name: 'Row 02-B', expected: 8, registered: 0 },
+          ];
+          const rowsList = rowSeeds.map((r, i) => {
+            const sensorsList = makeSensors(i, r.registered, base);
+            return {
+              id: `${s.id}-r${i + 1}`,
+              name: r.name,
+              expected: r.expected,
+              sensors: sensorsList.length,
+              healthy: sensorsList.filter(x => x.status === 'online').length,
+              sensorsList,
+            };
+          });
+          return { ...s, rowsList };
+        });
+      });
+
+      const [activeSite, setActiveSite] = React.useState(null);
+      const [activeRow, setActiveRow] = React.useState(null);
+      const [activeSensor, setActiveSensor] = React.useState(null);
+      const [successResult, setSuccessResult] = React.useState(null);
+      const [registerDefaults, setRegisterDefaults] = React.useState(null);
+
+      // sync screen reset whenever the start-screen tweak changes — seed deps
+      React.useEffect(() => {
+        // Seed activeSite + successResult so direct-jumps render correctly
+        if (['siteDetail', 'createRow', 'sensorRegister', 'editSite', 'rowDetail', 'editRow', 'editSensor'].includes(t.startScreen) && !activeSite) {
+          setActiveSite(sites[0]);
+        }
+        if (['rowDetail', 'editRow', 'editSensor'].includes(t.startScreen) && !activeRow) {
+          setActiveRow(sites[0]?.rowsList?.[0]);
+        }
+        if (t.startScreen === 'editSensor' && !activeSensor) {
+          setActiveSensor(sites[0]?.rowsList?.[0]?.sensorsList?.[0]);
+        }
+        if (t.startScreen === 'success' && !successResult) {
+          const seedSite = sites[0];
+          setSuccessResult({
+            site: seedSite, row: seedSite.rowsList[0],
+            sensorId: 'PA-SN-7F3C-4421',
+            coords: { lat: -28.0167, lng: 153.4000, accuracy: 3.2 },
+            timestamp: new Date(),
+          });
+        }
+        setScreen(t.startScreen);
+        if (t.startScreen === 'alerts') setTab('alerts');
+        else if (t.startScreen === 'settings') setTab('settings');
+        else if (t.startScreen === 'dashboard') setTab('dashboard');
+      }, [t.startScreen]);
+
+      const totalAlerts = sites.reduce((s, x) => s + x.alerts, 0);
+
+      const handleTabChange = (newTab) => {
+        setTab(newTab);
+        if (newTab === 'dashboard') setScreen('dashboard');
+        else if (newTab === 'alerts') setScreen('alerts');
+        else if (newTab === 'settings') setScreen('settings');
+      };
+
+      const showBottomNav = ['dashboard', 'alerts', 'settings'].includes(screen);
+
+      let content;
+      if (screen === 'login') {
+        content = <LoginScreen onLogin={() => { setScreen('dashboard'); setTab('dashboard'); }} />;
+      } else if (screen === 'dashboard') {
+        content = <DashboardScreen
+          sites={sites}
+          onOpenSite={(s) => { setActiveSite(s); setScreen('siteDetail'); }}
+          onAddSite={() => setScreen('createSite')}
+          onLogout={() => setScreen('login')}
+        />;
+      } else if (screen === 'createSite') {
+        content = <CreateSiteScreen
+          onBack={() => setScreen('dashboard')}
+          onCreated={(newSite) => {
+            setSites(prev => [...prev, { ...newSite, rowsList: [] }]);
+            setScreen('dashboard');
+          }}
+        />;
+      } else if (screen === 'siteDetail' && activeSite) {
+        const live = sites.find(s => s.id === activeSite.id) || activeSite;
+        content = <SiteDetailScreen
+          site={live} rows={live.rowsList || []}
+          onBack={() => setScreen('dashboard')}
+          onAddRow={() => setScreen('createRow')}
+          onRegisterSensor={() => {
+            setRegisterDefaults({ siteId: live.id, rowId: live.rowsList?.[0]?.id });
+            setScreen('sensorRegister');
+          }}
+          onEditSite={() => setScreen('editSite')}
+          onOpenRow={(r) => { setActiveRow(r); setScreen('rowDetail'); }}
+        />;
+      } else if (screen === 'editSite' && activeSite) {
+        const live = sites.find(s => s.id === activeSite.id) || activeSite;
+        content = <EditSiteScreen
+          site={live}
+          onBack={() => setScreen('siteDetail')}
+          onSave={(updated) => {
+            setSites(prev => prev.map(s => s.id === updated.id ? { ...s, ...updated } : s));
+            setScreen('siteDetail');
+          }}
+          onDelete={(toDelete) => {
+            setSites(prev => prev.filter(s => s.id !== toDelete.id));
+            setActiveSite(null);
+            setScreen('dashboard');
+          }}
+        />;
+      } else if (screen === 'rowDetail' && activeSite && activeRow) {
+        const liveSite = sites.find(s => s.id === activeSite.id) || activeSite;
+        const liveRow = liveSite.rowsList.find(r => r.id === activeRow.id) || activeRow;
+        content = <RowDetailScreen
+          site={liveSite} row={liveRow}
+          onBack={() => setScreen('siteDetail')}
+          onEditRow={() => setScreen('editRow')}
+          onAddSensor={() => {
+            setRegisterDefaults({ siteId: liveSite.id, rowId: liveRow.id });
+            setScreen('sensorRegister');
+          }}
+          onEditSensor={(sensor) => { setActiveSensor(sensor); setScreen('editSensor'); }}
+        />;
+      } else if (screen === 'editRow' && activeSite && activeRow) {
+        const liveSite = sites.find(s => s.id === activeSite.id) || activeSite;
+        const liveRow = liveSite.rowsList.find(r => r.id === activeRow.id) || activeRow;
+        content = <EditRowScreen
+          site={liveSite} row={liveRow}
+          onBack={() => setScreen('rowDetail')}
+          onSave={(updated) => {
+            setSites(prev => prev.map(s => s.id === liveSite.id
+              ? { ...s, rowsList: s.rowsList.map(r => r.id === updated.id ? { ...r, ...updated } : r) }
+              : s));
+            setActiveRow(updated);
+            setScreen('rowDetail');
+          }}
+          onDelete={(toDelete) => {
+            setSites(prev => prev.map(s => s.id === liveSite.id
+              ? {
+                  ...s,
+                  rows: Math.max(0, s.rows - 1),
+                  sensors: Math.max(0, s.sensors - (toDelete.sensors || 0)),
+                  rowsList: s.rowsList.filter(r => r.id !== toDelete.id),
+                }
+              : s));
+            setActiveRow(null);
+            setScreen('siteDetail');
+          }}
+        />;
+      } else if (screen === 'editSensor' && activeSite && activeRow && activeSensor) {
+        const liveSite = sites.find(s => s.id === activeSite.id) || activeSite;
+        const liveRow = liveSite.rowsList.find(r => r.id === activeRow.id) || activeRow;
+        content = <EditSensorScreen
+          sites={sites}
+          site={liveSite} row={liveRow} sensor={activeSensor}
+          onBack={() => setScreen('rowDetail')}
+          onSave={(updated, move) => {
+            setSites(prev => prev.map(s => {
+              if (move.fromSiteId === move.toSiteId && s.id === move.fromSiteId) {
+                // Same site, possibly different row
+                return {
+                  ...s,
+                  rowsList: s.rowsList.map(r => {
+                    if (move.fromRowId === move.toRowId && r.id === move.fromRowId) {
+                      return {
+                        ...r,
+                        sensorsList: r.sensorsList.map(x => x.id === activeSensor.id ? updated : x),
+                        healthy: r.sensorsList.map(x => x.id === activeSensor.id ? updated : x).filter(x => x.status === 'online').length,
+                      };
+                    }
+                    if (r.id === move.fromRowId) {
+                      // remove from old row
+                      const next = r.sensorsList.filter(x => x.id !== activeSensor.id);
+                      return { ...r, sensorsList: next, sensors: next.length, healthy: next.filter(x => x.status === 'online').length };
+                    }
+                    if (r.id === move.toRowId) {
+                      const next = [...r.sensorsList, updated];
+                      return { ...r, sensorsList: next, sensors: next.length, healthy: next.filter(x => x.status === 'online').length };
+                    }
+                    return r;
+                  }),
+                };
+              }
+              if (s.id === move.fromSiteId) {
+                // remove
+                return {
+                  ...s,
+                  sensors: Math.max(0, s.sensors - 1),
+                  rowsList: s.rowsList.map(r => r.id === move.fromRowId
+                    ? { ...r, sensorsList: r.sensorsList.filter(x => x.id !== activeSensor.id), sensors: Math.max(0, r.sensors - 1), healthy: r.sensorsList.filter(x => x.id !== activeSensor.id && x.status === 'online').length }
+                    : r),
+                };
+              }
+              if (s.id === move.toSiteId) {
+                return {
+                  ...s,
+                  sensors: s.sensors + 1,
+                  rowsList: s.rowsList.map(r => r.id === move.toRowId
+                    ? { ...r, sensorsList: [...r.sensorsList, updated], sensors: r.sensors + 1, healthy: [...r.sensorsList, updated].filter(x => x.status === 'online').length }
+                    : r),
+                };
+              }
+              return s;
+            }));
+            setActiveSensor(null);
+            // navigate back to rowDetail of new location if it's still in the current view
+            setScreen('rowDetail');
+          }}
+          onDelete={(sensor, ctx) => {
+            setSites(prev => prev.map(s => s.id === ctx.siteId
+              ? {
+                  ...s,
+                  sensors: Math.max(0, s.sensors - 1),
+                  rowsList: s.rowsList.map(r => r.id === ctx.rowId
+                    ? {
+                        ...r,
+                        sensorsList: r.sensorsList.filter(x => x.id !== sensor.id),
+                        sensors: Math.max(0, r.sensors - 1),
+                        healthy: r.sensorsList.filter(x => x.id !== sensor.id && x.status === 'online').length,
+                      }
+                    : r),
+                }
+              : s));
+            setActiveSensor(null);
+            setScreen('rowDetail');
+          }}
+        />;
+      } else if (screen === 'createRow' && activeSite) {
+        content = <CreateRowScreen
+          site={activeSite}
+          onBack={() => setScreen('siteDetail')}
+          onCreated={(newRow) => {
+            setSites(prev => prev.map(s =>
+              s.id === activeSite.id
+                ? { ...s, rows: s.rows + 1, rowsList: [...(s.rowsList || []), newRow] }
+                : s
+            ));
+            setScreen('siteDetail');
+          }}
+        />;
+      } else if (screen === 'sensorRegister') {
+        content = <SensorRegisterScreen
+          sites={sites}
+          defaults={registerDefaults}
+          onBack={() => setScreen(activeSite ? 'siteDetail' : 'dashboard')}
+          onConfirmed={(result) => {
+            // Build sensor record + insert into the row's sensorsList
+            const newSensor = {
+              id: result.sensorId,
+              lat: result.coords.lat,
+              lng: result.coords.lng,
+              status: 'online',
+            };
+            setSites(prev => prev.map(s => s.id === result.site.id
+              ? { ...s,
+                  sensors: s.sensors + 1,
+                  rowsList: s.rowsList.map(r => r.id === result.row.id
+                    ? { ...r,
+                        sensors: r.sensors + 1,
+                        healthy: r.healthy + 1,
+                        sensorsList: [...(r.sensorsList || []), newSensor],
+                      }
+                    : r)
+                }
+              : s));
+            setSuccessResult(result);
+            setScreen('success');
+          }}
+        />;
+      } else if (screen === 'success') {
+        content = <SuccessScreen
+          result={successResult || {}}
+          onAnother={() => setScreen('sensorRegister')}
+          onDashboard={() => { setScreen('dashboard'); setTab('dashboard'); }}
+        />;
+      } else if (screen === 'alerts') {
+        content = <AlertsScreen
+          alerts={MOCK_ALERTS}
+          onOpenSensor={(alert) => {
+            // Best-effort: try to find a sensor matching the alert's sensorId across all sites
+            for (const s of sites) {
+              for (const r of (s.rowsList || [])) {
+                const found = (r.sensorsList || []).find(x => x.id === alert.sensorId);
+                if (found) {
+                  setActiveSite(s); setActiveRow(r); setActiveSensor(found);
+                  setScreen('editSensor');
+                  return;
+                }
+              }
+            }
+            // Fallback — open a synthetic sensor in editor for the alert location
+            const fallbackSite = sites[0];
+            const fallbackRow = fallbackSite.rowsList[0];
+            setActiveSite(fallbackSite); setActiveRow(fallbackRow);
+            setActiveSensor({
+              id: alert.sensorId || 'PA-SN-UNKNOWN',
+              lat: alert.coords?.lat || -28.0167,
+              lng: alert.coords?.lng || 153.4000,
+              status: alert.severity === 'critical' ? 'fault' : 'online',
+            });
+            setScreen('editSensor');
+          }}
+        />;
+      } else if (screen === 'settings') {
+        content = <SettingsScreen onLogout={() => setScreen('login')} />;
+      }
+
+      return (
+        <>
+          <PhoneShell statusBarDark={false}>
+            {content}
+            {showBottomNav && (
+              <BottomNav active={tab} onChange={handleTabChange} alertCount={MOCK_ALERTS.filter(a => a.severity === 'critical').length} />
+            )}
+          </PhoneShell>
+
+          <TweaksPanel title="Tweaks">
+            <TweakSection title="Brand colors">
+              <TweakColor
+                label="Primary (cyan)" value={t.brandCyan}
+                onChange={v => setTweak('brandCyan', v)}
+                options={['#00AEEF', '#0066CC', '#1A8FE3', '#0095D9']}
+              />
+              <TweakColor
+                label="Accent (green)" value={t.brandGreen}
+                onChange={v => setTweak('brandGreen', v)}
+                options={['#39B54A', '#2E8540', '#4CAF50', '#86C232']}
+              />
+            </TweakSection>
+            <TweakSection title="Type">
+              <TweakRadio
+                label="Font" value={t.fontStack}
+                onChange={v => setTweak('fontStack', v)}
+                options={[{ value: 'Barlow', label: 'Barlow' }, { value: 'DM Sans', label: 'DM Sans' }]}
+              />
+            </TweakSection>
+            <TweakSection title="Jump to screen">
+              <TweakSelect
+                label="Start at" value={t.startScreen}
+                onChange={v => setTweak('startScreen', v)}
+                options={[
+                  { value: 'login',          label: '1 · Login / Register' },
+                  { value: 'dashboard',      label: '2 · Dashboard (Sites)' },
+                  { value: 'createSite',     label: '3 · Create Site' },
+                  { value: 'siteDetail',     label: '4 · Site Detail / Rows' },
+                  { value: 'createRow',      label: '5 · Create Row' },
+                  { value: 'sensorRegister', label: '6 · Register Sensor' },
+                  { value: 'success',        label: '7 · Success' },
+                  { value: 'rowDetail',      label: '8 · Row Detail (Sensors)' },
+                  { value: 'editSite',       label: '9 · Edit Site' },
+                  { value: 'editRow',        label: '10 · Edit Row' },
+                  { value: 'editSensor',     label: '11 · Edit Sensor' },
+                  { value: 'alerts',         label: 'Tab · Alerts' },
+                  { value: 'settings',       label: 'Tab · Settings' },
+                ]}
+              />
+            </TweakSection>
+          </TweaksPanel>
+        </>
+      );
+    }
+
+    // Boot — wait for all babel scripts to register globals
+    function boot() {
+      if (!window.PhoneShell || !window.LoginScreen || !window.AlertsScreen
+          || !window.useTweaks || !window.EditSiteScreen || !window.RowDetailScreen) {
+        return requestAnimationFrame(boot);
+      }
+      // Seed activeSite state for siteDetail/createRow direct-jumps via tweaks
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      // We need to inject a starter activeSite so siteDetail/createRow render directly
+      function AppBoot() {
+        return <App />;
+      }
+      root.render(<AppBoot />);
+    }
+    boot();
+  </script>
+</body>
+</html>
