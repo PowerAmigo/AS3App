@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TOKEN_KEY = 'pa_auth_token';
 const USER_KEY = 'pa_user_email';
@@ -15,9 +15,10 @@ export function AuthProvider({ children }) {
     (async () => {
       try {
         const [t, u] = await Promise.all([
-          SecureStore.getItemAsync(TOKEN_KEY),
-          SecureStore.getItemAsync(USER_KEY),
+          AsyncStorage.getItem(TOKEN_KEY),
+          AsyncStorage.getItem(USER_KEY),
         ]);
+
         if (t) setToken(t);
         if (u) setUserEmail(u);
       } finally {
@@ -28,18 +29,20 @@ export function AuthProvider({ children }) {
 
   const signIn = async (token, email) => {
     await Promise.all([
-      SecureStore.setItemAsync(TOKEN_KEY, token),
-      SecureStore.setItemAsync(USER_KEY, email),
+      AsyncStorage.setItem(TOKEN_KEY, token),
+      AsyncStorage.setItem(USER_KEY, email),
     ]);
+
     setToken(token);
     setUserEmail(email);
   };
 
   const signOut = async () => {
     await Promise.all([
-      SecureStore.deleteItemAsync(TOKEN_KEY),
-      SecureStore.deleteItemAsync(USER_KEY),
+      AsyncStorage.removeItem(TOKEN_KEY),
+      AsyncStorage.removeItem(USER_KEY),
     ]);
+
     setToken(null);
     setUserEmail(null);
   };
@@ -53,6 +56,10 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
+
+  if (!ctx) {
+    throw new Error('useAuth must be used inside AuthProvider');
+  }
+
   return ctx;
 }
